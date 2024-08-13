@@ -3,44 +3,21 @@ from flask import render_template, request, url_for, redirect, jsonify, Blueprin
 from app.models import Users, Expenses
 from app.forms import AddUser, AddExpense, ModExpense
 from datetime import date
-from app import db
 from app.models import User
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token 
 from app.utils import verify_user_credentials
 import re 
 
-@app.route('/protected', methods=['GET'])
-@jwt_required()
-def protected():
-    current_user = get_jwt_identity()
-    return jsonify({'message': f'Welcome, user {current_user}'}), 200
-
-@app.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    jti = get_jwt()['jti']
-    blacklist.add(jti)
-    return jsonify({'message': 'Successfully logged out'}), 200
-
-
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({'message': 'Missing required fields'}), 400
-
-    email = data['email']
-    password = data['password']
-
-    user = verify_user_credentials(email, password)
-    if user is None:
-        return jsonify({'message': 'Invalid email or password'}), 401
-
-    access_token = create_access_token(identity=user.id)
-    return jsonify({'access_token': access_token}), 200
-
+@app.route('/')
+def home(): 
+    count_users = Users.query.count()
+    if count_users==0: 
+        return render_template("home.html")
+    else: 
+        users = Users.query.all() 
+        return render_template("home.html", users=users)
+    
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -73,14 +50,35 @@ def register():
 
     return jsonify({'message': 'User registered successfully'}), 201
 
-@app.route('/')
-def home(): 
-    count_users = Users.query.count()
-    if count_users==0: 
-        return render_template("home.html")
-    else: 
-        users = Users.query.all() 
-        return render_template("home.html", users=users)
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    email = data['email']
+    password = data['password']
+
+    user = verify_user_credentials(email, password)
+    if user is None:
+        return jsonify({'message': 'Invalid email or password'}), 401
+
+    access_token = create_access_token(identity=user.id)
+    return jsonify({'access_token': access_token}), 200
+
+@app.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    jti = get_jwt()['jti']
+    blacklist.add(jti)
+    return jsonify({'message': 'Successfully logged out'}), 200
+
+@app.route('/protected', methods=['GET'])
+@jwt_required()
+def protected():
+    current_user = get_jwt_identity()
+    return jsonify({'message': f'Welcome, user {current_user}'}), 200
 
 @app.route('/add_user', methods=['GET', 'POST'])
 def adding_new_users():
