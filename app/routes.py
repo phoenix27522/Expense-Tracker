@@ -11,7 +11,7 @@ import re
 
 main = Blueprint('main', __name__)
 
-@app.route('/')
+@main.route('/')
 def home(): 
     count_users = Users.query.count()
     if count_users==0: 
@@ -20,7 +20,7 @@ def home():
         users = Users.query.all() 
         return render_template("home.html", users=users)
     
-@app.route('/register', methods=['POST'])
+@main.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
 
@@ -52,7 +52,7 @@ def register():
 
     return jsonify({'message': 'User registered successfully'}), 201
 
-@app.route('/login', methods=['POST'])
+@main.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
 
@@ -69,20 +69,20 @@ def login():
     access_token = create_access_token(identity=user.id)
     return jsonify({'access_token': access_token}), 200
 
-@app.route('/logout', methods=['POST'])
+@main.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
     jti = get_jwt()['jti']
     blacklist.add(jti)
     return jsonify({'message': 'Successfully logged out'}), 200
 
-@app.route('/protected', methods=['GET'])
+@main.route('/protected', methods=['GET'])
 @jwt_required()
 def protected():
     current_user = get_jwt_identity()
     return jsonify({'message': f'Welcome, user {current_user}'}), 200
 
-@app.route('/add_user', methods=['GET', 'POST'])
+@main.route('/add_user', methods=['GET', 'POST'])
 def adding_new_users():
 
     form = AddUser (request.form)
@@ -91,7 +91,7 @@ def adding_new_users():
         return render_template("add_user.html", form=form)
     else:
         try: 
-            new_user = Users (name = request.values.get ("Name"), email_address = request.values.get ("Email_address") )
+            new_user = User(name=request.values.get("Name"), email=request.values.get("Email_address"))
             db.session.add(new_user)
             db.session.commit()
             return redirect(url_for("home"))
@@ -105,7 +105,7 @@ def adding_new_users():
             return render_template('add_user.html', form=form, error_db_insert=error)
         
 
-@app.route('/expenses')
+@main.route('/expenses')
 def show_expenses():
     name_user = request.values.get("user")
 
@@ -128,7 +128,7 @@ def show_expenses():
 
             return render_template("expenses.html", expenses=expenses_user, name_user = name_user, total =total_amount) 
 
-@app.route('/add_expense', methods=['GET', 'POST'] )
+@main.route('/add_expense', methods=['GET', 'POST'] )
 def adding_new_expenses():
     
     name_user = request.values.get("user")
@@ -158,7 +158,7 @@ def adding_new_expenses():
             else: 
                 return render_template("add_expense.html", form=form)
 
-@app.route('/mod_expense', methods=['GET', 'POST'] )
+@main.route('/mod_expense', methods=['GET', 'POST'] )
 def modifying_expenses():   
     name_user = request.values.get("user")
     expense_id = request.values.get ("id")
