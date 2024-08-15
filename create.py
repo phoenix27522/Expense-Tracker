@@ -1,3 +1,7 @@
-from app import db 
+from app import create_app, db
+from app.models import User
 
-db.create_all()
+app = create_app()
+
+with app.app_context():
+    db.create_all()

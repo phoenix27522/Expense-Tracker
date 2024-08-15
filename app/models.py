@@ -6,7 +6,7 @@ from datetime import datetime
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), index=True, unique=True)
+    user_name = db.Column(db.String(50), db.ForeignKey('user.username'), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -21,7 +21,7 @@ class Expenses (db.Model):
     expense_id = db.Column(db.Integer, primary_key=True, unique = True, nullable=False)
     type_expense = db.Column(db.String(120), nullable=False)
     description_expense = db.Column(db.String(120), nullable=False)
-    date_purchase = db.Column(db.String(10), nullable = False) 
+    date_purchase = db.Column(db.DateTime, nullable=False) 
     amount = db.Column(db.Float, nullable = False)
     user_name = db.Column(db.String(50), db.ForeignKey('users.name'), nullable=False)
 

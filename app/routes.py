@@ -1,5 +1,5 @@
-from app import app, blacklist, db, jwt
-from flask import render_template, request, url_for, redirect, jsonify, Blueprint
+from app import blacklist, db, jwt
+from flask import app, render_template, request, url_for, redirect, jsonify, Blueprint
 from app.models import Users, Expenses
 from app.forms import AddUser, AddExpense, ModExpense
 from datetime import date
@@ -8,6 +8,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token 
 from app.utils import verify_user_credentials
 import re 
+
+main = Blueprint('main', __name__)
 
 @app.route('/')
 def home(): 
@@ -204,9 +206,3 @@ def modifying_expenses():
                     return redirect(url_for("show_expenses", user = name_user))
             else: 
                 return render_template("mod_expense.html", form=form)
-
-       
-
-
-
-
