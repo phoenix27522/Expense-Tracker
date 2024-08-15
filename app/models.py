@@ -1,6 +1,3 @@
-from app import db 
-import datetime
-
 from app import db, bcrypt
 from datetime import datetime
 

@@ -17,8 +17,8 @@ def create_app(config_class=Config):
     bcrypt.init_app(app)
     jwt.init_app(app)
 
-    from app import routes
-    app.register_blueprint(routes.bp)
+    from app.routes import main as main_blueprint
+    app.register_blueprint(main_blueprint)
 
     @jwt.token_in_blocklist_loader
     def check_if_token_is_revoked(jwt_header, jwt_payload):
