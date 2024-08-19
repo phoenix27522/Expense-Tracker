@@ -4,7 +4,7 @@ from io import StringIO
 import bcrypt
 from flask import Flask, make_response, render_template, request, url_for, redirect, jsonify, Blueprint
 from sqlalchemy import func
-from app.models import Category, User, Expenses  # Correct model names
+from app.models import Category, Notification, User, Expenses  # Correct model names
 from app.forms import AddUser, AddExpense, ModExpense
 from datetime import date, datetime
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token
@@ -442,3 +442,46 @@ def export_expenses_pdf():
     except Exception as e:
         print(f"Error in export_expenses_pdf: {e}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@main.route('/notifications', methods=['GET'])
+@jwt_required()
+def get_notifications():
+    user_id = get_jwt_identity()
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+
+    return jsonify([
+        {
+            'id': notification.id,
+            'message': notification.message,
+            'type': notification.type,
+            'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'is_read': notification.is_read
+        } for notification in notifications
+    ]), 200
+
+@main.route('/notifications/<int:id>/read', methods=['PATCH'])
+@jwt_required()
+def mark_notification_as_read(id):
+    user_id = get_jwt_identity()
+    notification = Notification.query.filter_by(id=id, user_id=user_id).first()
+
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
+
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'message': 'Notification marked as read'}), 200
+
+@main.route('/notifications/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_notification(id):
+    user_id = get_jwt_identity()
+    notification = Notification.query.filter_by(id=id, user_id=user_id).first()
+
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
+
+    db.session.delete(notification)
+    db.session.commit()
+    return jsonify({'message': 'Notification deleted successfully'}), 200
+
