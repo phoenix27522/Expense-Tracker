@@ -21,4 +21,10 @@ class Expenses(db.Model):
     date_purchase = db.Column(db.DateTime, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     user_name = db.Column(db.String(50), db.ForeignKey('user.user_name'), nullable=False)
-    # Correct the ForeignKey to reference 'user.user_name'
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
+    recurrence = db.Column(db.String(20), nullable=True)
+    
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    expenses = db.relationship('Expenses', backref='category', lazy=True)

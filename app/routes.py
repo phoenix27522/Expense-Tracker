@@ -1,6 +1,6 @@
 import bcrypt
 from flask import Flask, render_template, request, url_for, redirect, jsonify, Blueprint
-from app.models import User, Expenses  # Correct model names
+from app.models import Category, User, Expenses  # Correct model names
 from app.forms import AddUser, AddExpense, ModExpense
 from datetime import date
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token
@@ -107,47 +107,45 @@ def adding_new_users():
 @main.route('/expenses')
 def show_expenses():
     name_user = request.values.get("user")
-
-    if not name_user: 
-        return redirect(url_for("main.home"))
-    else: 
-        expenses_user = db.session.query(Expenses).join(User).filter(User.user_name == name_user).all()
-
-        if not expenses_user: 
+    if name_user is None:
+        return redirect(url_for("home"))
+    else:
+        expenses_user = db.session.query(Expenses).join(User).filter(User.name == name_user).all()
+        if not expenses_user:
             return render_template("expenses.html", name_user=name_user)
-        else: 
-            total_amount = sum(exp.amount for exp in expenses_user)
+        else:
+            total_amount = sum([expense.amount for expense in expenses_user])
             return render_template("expenses.html", expenses=expenses_user, name_user=name_user, total=round(total_amount, 2))
 
 @main.route('/add_expense', methods=['GET', 'POST'] )
 def adding_new_expenses():
     
     name_user = request.values.get("user")
-
+    
     if name_user ==None: 
         return redirect (url_for("home"))
     else: 
         form = AddExpense(request.form)
 
-        if request.method == 'GET':
-            return render_template("add_expense.html", form=form)
+    categories = Category.query.all()
+    if request.method == 'GET':
+        return render_template("add_expense.html", form=form, categories=categories)
+    else:
+        if form.validate():
+            category_id = request.values.get("Category")
+            new_expense = Expenses(
+                type_expense=request.values.get("Type"),
+                description_expense=request.values.get("Description"),
+                date_purchase=request.values.get("Date"),
+                amount=request.values.get("Amount"),
+                user_name=name_user,
+                category_id=category_id
+            )
+            db.session.add(new_expense)
+            db.session.commit()
+            return redirect(url_for("show_expenses", user=name_user))
         else:
-            if form.validate (): 
-
-                new_expense = Expenses (type_expense= request.values.get ("Type"), 
-                description_expense = request.values.get ("Description"), 
-                date_purchase = request.values.get ("Date"), 
-                amount = request.values.get ("Amount"), 
-                user_name = name_user ) 
-
-                db.session.add(new_expense)
-                db.session.commit()
-                       
-                return redirect(url_for("show_expenses", user = name_user))
-
-                
-            else: 
-                return render_template("add_expense.html", form=form)
+            return render_template("add_expense.html", form=form, categories=categories)
 
 @main.route('/mod_expense', methods=['GET', 'POST'] )
 def modifying_expenses():   
