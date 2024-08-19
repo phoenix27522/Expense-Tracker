@@ -1,33 +1,32 @@
-from app import blacklist, db, jwt
-from flask import app, render_template, request, url_for, redirect, jsonify, Blueprint
-from app.models import Users, Expenses
+import bcrypt
+from flask import Flask, render_template, request, url_for, redirect, jsonify, Blueprint
+from app.models import User, Expenses  # Correct model names
 from app.forms import AddUser, AddExpense, ModExpense
 from datetime import date
-from app.models import User
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token 
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token
 from app.utils import verify_user_credentials
-import re 
+from app import blacklist, db, jwt
+import re
 
 main = Blueprint('main', __name__)
 
 @main.route('/')
 def home(): 
-    count_users = Users.query.count()
+    count_users = User.query.count()
     if count_users==0: 
         return render_template("home.html")
     else: 
-        users = Users.query.all() 
+        users = User.query.all() 
         return render_template("home.html", users=users)
     
 @main.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
 
-    if not data or not data.get('username') or not data.get('email') or not data.get('password'):
+    if not data or not data.get('user_name') or not data.get('email') or not data.get('password'):
         return jsonify({'message': 'Missing required fields'}), 400
 
-    username = data['username']
+    user_name = data['user_name']
     email = data['email']
     password = data['password']
 
@@ -38,14 +37,14 @@ def register():
     if len(password) < 6:
         return jsonify({'message': 'Password too short, must be at least 6 characters'}), 400
 
-    existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
+    existing_user = User.query.filter((User.user_name == user_name) | (User.email == email)).first()
     if existing_user:
         return jsonify({'message': 'User already exists'}), 400
 
     user = User(
-        username=username,
+        user_name=user_name,
         email=email,
-        password_hash=generate_password_hash(password)
+        password_hash=bcrypt.generate_password_hash(password).decode('utf-8')
     )
     db.session.add(user)
     db.session.commit()
@@ -109,24 +108,16 @@ def adding_new_users():
 def show_expenses():
     name_user = request.values.get("user")
 
-    if name_user ==None: 
-        return redirect (url_for("home"))
+    if not name_user: 
+        return redirect(url_for("main.home"))
     else: 
+        expenses_user = db.session.query(Expenses).join(User).filter(User.user_name == name_user).all()
 
-        expenses_user = db.session.query(Expenses).join(Users).filter(Users.name ==name_user).all()
-    
-        if expenses_user==[]: 
-            return render_template("expenses.html", name_user = name_user)
+        if not expenses_user: 
+            return render_template("expenses.html", name_user=name_user)
         else: 
-            query = Expenses.query.filter (Expenses.user_name== name_user).all()
-                
-            Total_amount = 0
-            for data in query: 
-                data.amount
-                Total_amount +=data.amount
-            total_amount = round(Total_amount,2)
-
-            return render_template("expenses.html", expenses=expenses_user, name_user = name_user, total =total_amount) 
+            total_amount = sum(exp.amount for exp in expenses_user)
+            return render_template("expenses.html", expenses=expenses_user, name_user=name_user, total=round(total_amount, 2))
 
 @main.route('/add_expense', methods=['GET', 'POST'] )
 def adding_new_expenses():
