@@ -195,3 +195,57 @@ def modifying_expenses():
                     return redirect(url_for("show_expenses", user = name_user))
             else: 
                 return render_template("mod_expense.html", form=form)
+
+@main.route('/filter_expenses', methods=['GET'])
+@jwt_required()
+def filter_expenses():
+    user_name = get_jwt_identity()
+
+    # Retrieve query parameters
+    type_expense = request.args.get('type_expense')
+    min_amount = request.args.get('min_amount', type=float)
+    max_amount = request.args.get('max_amount', type=float)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    sort_by = request.args.get('sort_by', 'date_purchase')  # Default sorting by date_purchase
+    order = request.args.get('order', 'asc')
+
+    # Build the query
+    query = Expenses.query.filter_by(user_name=user_name)
+
+    if type_expense:
+        query = query.filter(Expenses.type_expense == type_expense)
+
+    if min_amount is not None:
+        query = query.filter(Expenses.amount >= min_amount)
+
+    if max_amount is not None:
+        query = query.filter(Expenses.amount <= max_amount)
+
+    if start_date:
+        query = query.filter(Expenses.date_purchase >= start_date)
+
+    if end_date:
+        query = query.filter(Expenses.date_purchase <= end_date)
+
+    if order == 'asc':
+        query = query.order_by(getattr(Expenses, sort_by).asc())
+    else:
+        query = query.order_by(getattr(Expenses, sort_by).desc())
+
+    expenses = query.all()
+
+    # Serialize the data
+    result = []
+    for expense in expenses:
+        expense_data = {
+            'id': expense.expense_id,
+            'type_expense': expense.type_expense,
+            'description_expense': expense.description_expense,
+            'date_purchase': expense.date_purchase.strftime('%Y-%m-%d'),
+            'amount': expense.amount,
+            'user_name': expense.user_name,
+        }
+        result.append(expense_data)
+
+    return jsonify(result), 200
