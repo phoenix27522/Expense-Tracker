@@ -1,8 +1,12 @@
+import csv
+from fpdf import FPDF
+from io import StringIO
 import bcrypt
-from flask import Flask, render_template, request, url_for, redirect, jsonify, Blueprint
+from flask import Flask, make_response, render_template, request, url_for, redirect, jsonify, Blueprint
+from sqlalchemy import func
 from app.models import Category, User, Expenses  # Correct model names
 from app.forms import AddUser, AddExpense, ModExpense
-from datetime import date
+from datetime import date, datetime
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token
 from app.utils import verify_user_credentials
 from app import blacklist, db, jwt
@@ -325,3 +329,116 @@ def edit_profile():
 
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+@main.route('/report/monthly_summary', methods=['GET'])
+@jwt_required()
+def monthly_expense_summary():
+    try:
+        # Get the current user's ID from the JWT token
+        user_id = get_jwt_identity()
+
+        # Extract the month and year from the request query parameters
+        year = request.args.get('year', type=int, default=datetime.utcnow().year)
+        month = request.args.get('month', type=int, default=datetime.utcnow().month)
+
+        # Query the database to sum expenses by category for the given month
+        summary = db.session.query(
+            Expenses.type_expense,
+            func.sum(Expenses.amount).label('total_amount')
+        ).filter(
+            func.extract('year', Expenses.date_purchase) == year,
+            func.extract('month', Expenses.date_purchase) == month,
+            Expenses.user_name == user_id
+        ).group_by(Expenses.type_expense).all()
+
+        # Format the result
+        result = {
+            'year': year,
+            'month': month,
+            'summary': [{'category': row.type_expense, 'total_amount': row.total_amount} for row in summary]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"Error in monthly_expense_summary: {e}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+    
+@main.route('/export/csv', methods=['GET'])
+@jwt_required()
+def export_expenses_csv():
+    try:
+        # Get the current user's ID from the JWT token
+        user_id = get_jwt_identity()
+
+        # Query all expenses for the current user
+        expenses = Expenses.query.filter_by(user_name=user_id).all()
+
+        # Create a StringIO object to write the CSV data
+        si = StringIO()
+        csv_writer = csv.writer(si)
+
+        # Write CSV header
+        csv_writer.writerow(['Type', 'Description', 'Date', 'Amount'])
+
+        # Write expense data
+        for expense in expenses:
+            csv_writer.writerow([
+                expense.type_expense,
+                expense.description_expense,
+                expense.date_purchase.strftime('%Y-%m-%d'),
+                expense.amount
+            ])
+
+        # Generate the response with the CSV data
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=expenses.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+
+    except Exception as e:
+        print(f"Error in export_expenses_csv: {e}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+    
+
+@main.route('/export/pdf', methods=['GET'])
+@jwt_required()
+def export_expenses_pdf():
+    try:
+        # Get the current user's ID from the JWT token
+        user_id = get_jwt_identity()
+
+        # Query all expenses for the current user
+        expenses = Expenses.query.filter_by(user_name=user_id).all()
+
+        # Create a PDF document
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+
+        # Add title
+        pdf.cell(200, 10, txt="Expense Report", ln=True, align='C')
+
+        # Add table headers
+        pdf.cell(50, 10, txt="Type", border=1)
+        pdf.cell(70, 10, txt="Description", border=1)
+        pdf.cell(30, 10, txt="Date", border=1)
+        pdf.cell(30, 10, txt="Amount", border=1)
+        pdf.ln()
+
+        # Add expense data
+        for expense in expenses:
+            pdf.cell(50, 10, txt=expense.type_expense, border=1)
+            pdf.cell(70, 10, txt=expense.description_expense, border=1)
+            pdf.cell(30, 10, txt=expense.date_purchase.strftime('%Y-%m-%d'), border=1)
+            pdf.cell(30, 10, txt=f"{expense.amount:.2f}", border=1)
+            pdf.ln()
+
+        # Generate the PDF and return as a response
+        output = make_response(pdf.output(dest='S').encode('latin1'))
+        output.headers["Content-Disposition"] = "attachment; filename=expenses.pdf"
+        output.headers["Content-type"] = "application/pdf"
+        return output
+
+    except Exception as e:
+        print(f"Error in export_expenses_pdf: {e}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
