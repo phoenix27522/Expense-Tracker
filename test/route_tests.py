@@ -445,6 +445,32 @@ class TestRecurringExpensesEdgeCases(unittest.TestCase):
     def setUp(self):
         self.base_url = "http://localhost:5000/recurring_expenses"
     
+    def test_add_recurring_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 100.0,
+            "category": "Subscription",
+            "description": "Monthly magazine subscription",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response.status_code, 201)
+    
+    def test_edit_recurring_expense(self):
+        response = requests.put(self.base_url + "/1", json={
+            "amount": 120.0,
+            "category": "Subscription",
+            "description": "Updated subscription",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response.status_code, 200)
+    
+    def test_delete_recurring_expense(self):
+        response = requests.delete(self.base_url + "/1")
+        self.assertEqual(response.status_code, 204)
+    
+    def test_view_recurring_expenses(self):
+        response = requests.get(self.base_url)
+        self.assertEqual(response.status_code, 200)
+
     def test_invalid_recurrence_frequency(self):
         response = requests.post(self.base_url, json={
             "amount": 50.0,
@@ -633,6 +659,122 @@ class TestFilteringAndSortingExpenses(unittest.TestCase):
         response = requests.get(self.base_url + "?category=NonExistentCategory&start_date=2024-06-01&end_date=2024-06-30&sort_by=amount&order=asc")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 0)
+
+
+"""Test Notifications For Large Expenses"""
+class TestNotificationsForLargeExpenses(unittest.TestCase):
+    def setUp(self):
+        self.base_url = "http://localhost:5000/expenses"
+        self.notifications_url = "http://localhost:5000/notifications"
+    
+    def test_notification_trigger_for_large_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 5000.0,
+            "category": "Electronics",
+            "description": "New laptop"
+        })
+        self.assertEqual(response.status_code, 201)
+        # Check notifications
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        self.assertTrue(any("large expense" in notification['message'].lower() for notification in notifications))
+    
+    def test_no_notification_for_small_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 10.0,
+            "category": "Snacks",
+            "description": "Chips"
+        })
+        self.assertEqual(response.status_code, 201)
+        # Check notifications
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        self.assertFalse(any("large expense" in notification['message'].lower() for notification in notifications))
+
+    def test_notification_message_content(self):
+        response = requests.post(self.base_url, json={
+            "amount": 7500.0,
+            "category": "Furniture",
+            "description": "New sofa set"
+        })
+        self.assertEqual(response.status_code, 201)
+        # Check notifications
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        relevant_notifications = [notification for notification in notifications if "large expense" in notification['message'].lower()]
+        self.assertTrue(any("7500.0" in notification['message'] for notification in relevant_notifications))
+        self.assertTrue(any("Furniture" in notification['message'] for notification in relevant_notifications))
+
+    def test_notification_not_repeated(self):
+        response = requests.post(self.base_url, json={
+            "amount": 10000.0,
+            "category": "Travel",
+            "description": "Vacation"
+        })
+        self.assertEqual(response.status_code, 201)
+        notification_response1 = requests.get(self.notifications_url)
+        self.assertEqual(notification_response1.status_code, 200)
+        notifications1 = notification_response1.json()
+
+        response = requests.post(self.base_url, json={
+            "amount": 10000.0,
+            "category": "Travel",
+            "description": "Another Vacation"
+        })
+        self.assertEqual(response.status_code, 201)
+        notification_response2 = requests.get(self.notifications_url)
+        self.assertEqual(notification_response2.status_code, 200)
+        notifications2 = notification_response2.json()
+
+        self.assertEqual(len(notifications1), len(notifications2))
+
+    # Additional Edge Cases
+
+    def test_notification_for_zero_amount_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 0.0,
+            "category": "Misc",
+            "description": "Zero amount test"
+        })
+        self.assertEqual(response.status_code, 201)
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        self.assertFalse(any("large expense" in notification['message'].lower() for notification in notifications))
+
+    def test_multiple_large_expenses(self):
+        response1 = requests.post(self.base_url, json={
+            "amount": 6000.0,
+            "category": "Electronics",
+            "description": "TV"
+        })
+        self.assertEqual(response1.status_code, 201)
+        response2 = requests.post(self.base_url, json={
+            "amount": 7000.0,
+            "category": "Furniture",
+            "description": "Table"
+        })
+        self.assertEqual(response2.status_code, 201)
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        self.assertTrue(any("large expense" in notification['message'].lower() for notification in notifications))
+        self.assertEqual(len([n for n in notifications if "large expense" in n['message'].lower()]), 2)
+
+    def test_notification_for_edge_case_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 99999.99,  # Assuming this is a special edge case
+            "category": "Luxury",
+            "description": "Exotic vacation"
+        })
+        self.assertEqual(response.status_code, 201)
+        notification_response = requests.get(self.notifications_url)
+        self.assertEqual(notification_response.status_code, 200)
+        notifications = notification_response.json()
+        self.assertTrue(any("large expense" in notification['message'].lower() for notification in notifications))
 
 
 if __name__ == '__main__':
