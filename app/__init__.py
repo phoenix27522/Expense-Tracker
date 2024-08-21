@@ -3,11 +3,11 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timedelta
-from config import Config
-from app.models import Expenses, db  # Import your models here
+from datetime import timedelta
+from app.config import Config
 from app.blacklist import blacklist
 
+# Initialize extensions
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 jwt = JWTManager()
@@ -16,16 +16,21 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Initialize extensions with the app
     db.init_app(app)
     bcrypt.init_app(app)
     jwt.init_app(app)
 
+    # Import and register the routes blueprint
     from app.routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
 
     # APScheduler configuration
     def create_recurring_expenses():
         with app.app_context():
+            # Import models inside the function to avoid circular imports
+            from app.models import Expenses
+
             expenses = Expenses.query.filter(Expenses.recurrence.isnot(None)).all()
             for expense in expenses:
                 if expense.recurrence == 'daily':
