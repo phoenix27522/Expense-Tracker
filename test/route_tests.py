@@ -440,6 +440,200 @@ class TestExpenseCategorization(unittest.TestCase):
         response = requests.delete(self.base_url + "/9999")
         self.assertEqual(response.status_code, 404)
 
+"""Test RecurringExpenses EdgeCases"""
+class TestRecurringExpensesEdgeCases(unittest.TestCase):
+    def setUp(self):
+        self.base_url = "http://localhost:5000/recurring_expenses"
+    
+    def test_invalid_recurrence_frequency(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Invalid recurrence test",
+            "recurrence": "weekly"  # Assuming weekly is not allowed
+        })
+        self.assertEqual(response.status_code, 400)
+    
+    def test_conflicting_recurring_expenses(self):
+        response1 = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Monthly magazine",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response1.status_code, 201)
+        response2 = requests.post(self.base_url, json={
+            "amount": 70.0,
+            "category": "Subscription",
+            "description": "Conflicting monthly magazine",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response2.status_code, 409)
+    
+    def test_missing_recurrence_field(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Missing recurrence field"
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_zero_amount_recurring_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 0.0,
+            "category": "Subscription",
+            "description": "Zero amount test",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response.status_code, 400)
+    
+    def test_past_start_date_recurring_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Past start date test",
+            "recurrence": "monthly",
+            "start_date": "2020-01-01"
+        })
+        self.assertEqual(response.status_code, 400)
+    
+    def test_recurring_expense_end_date_before_start_date(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "End date before start date",
+            "recurrence": "monthly",
+            "start_date": "2024-01-01",
+            "end_date": "2023-12-31"
+        })
+        self.assertEqual(response.status_code, 400)
+
+    # Additional Edge Cases
+
+    def test_invalid_date_format(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Invalid date format",
+            "recurrence": "monthly",
+            "start_date": "01-01-2024"  # Incorrect date format
+        })
+        self.assertEqual(response.status_code, 400)
+    
+    def test_missing_amount_field(self):
+        response = requests.post(self.base_url, json={
+            "category": "Subscription",
+            "description": "Missing amount field",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_large_amount_recurring_expense(self):
+        response = requests.post(self.base_url, json={
+            "amount": 1e6,
+            "category": "Subscription",
+            "description": "Large amount test",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response.status_code, 201)
+
+    def test_future_end_date(self):
+        response = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Future end date test",
+            "recurrence": "monthly",
+            "start_date": "2024-01-01",
+            "end_date": "2100-01-01"
+        })
+        self.assertEqual(response.status_code, 201)
+
+    def test_redundant_recurring_expense_creation(self):
+        response1 = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Redundant creation test",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response1.status_code, 201)
+        
+        response2 = requests.post(self.base_url, json={
+            "amount": 50.0,
+            "category": "Subscription",
+            "description": "Redundant creation test",
+            "recurrence": "monthly"
+        })
+        self.assertEqual(response2.status_code, 409)
+
+"""Test Filtering And Sorting Expenses"""
+class TestFilteringAndSortingExpenses(unittest.TestCase):
+    def setUp(self):
+        self.base_url = "http://localhost:5000/expenses"
+
+    def test_filter_by_category(self):
+        response = requests.get(self.base_url + "?category=Food")
+        self.assertEqual(response.status_code, 200)
+        for expense in response.json():
+            self.assertEqual(expense['category'], 'Food')
+    
+    def test_filter_by_date_range(self):
+        response = requests.get(self.base_url + "?start_date=2024-01-01&end_date=2024-01-31")
+        self.assertEqual(response.status_code, 200)
+        for expense in response.json():
+            self.assertTrue("2024-01-01" <= expense['date'] <= "2024-01-31")
+    
+    def test_sort_by_amount_ascending(self):
+        response = requests.get(self.base_url + "?sort_by=amount&order=asc")
+        self.assertEqual(response.status_code, 200)
+        expenses = response.json()
+        amounts = [expense['amount'] for expense in expenses]
+        self.assertEqual(amounts, sorted(amounts))
+    
+    def test_sort_by_date_descending(self):
+        response = requests.get(self.base_url + "?sort_by=date&order=desc")
+        self.assertEqual(response.status_code, 200)
+        expenses = response.json()
+        dates = [expense['date'] for expense in expenses]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+    
+    def test_combined_filtering_and_sorting(self):
+        response = requests.get(self.base_url + "?category=Travel&start_date=2024-06-01&end_date=2024-06-30&sort_by=amount&order=asc")
+        self.assertEqual(response.status_code, 200)
+        expenses = response.json()
+        amounts = [expense['amount'] for expense in expenses]
+        self.assertEqual(amounts, sorted(amounts))
+        for expense in expenses:
+            self.assertEqual(expense['category'], 'Travel')
+            self.assertTrue("2024-06-01" <= expense['date'] <= "2024-06-30")
+
+    # Additional Edge Cases
+
+    def test_filter_with_no_results(self):
+        response = requests.get(self.base_url + "?category=NonExistentCategory")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 0)
+    
+    def test_invalid_date_format(self):
+        response = requests.get(self.base_url + "?start_date=01-01-2024&end_date=31-01-2024")
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_sort_field(self):
+        response = requests.get(self.base_url + "?sort_by=invalid_field&order=asc")
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_order(self):
+        response = requests.get(self.base_url + "?sort_by=amount&order=invalid_order")
+        self.assertEqual(response.status_code, 400)
+    
+    def test_missing_sort_by_parameter(self):
+        response = requests.get(self.base_url + "?sort_by=&order=asc")
+        self.assertEqual(response.status_code, 400)
+    
+    def test_combined_filtering_no_results(self):
+        response = requests.get(self.base_url + "?category=NonExistentCategory&start_date=2024-06-01&end_date=2024-06-30&sort_by=amount&order=asc")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
