@@ -121,14 +121,13 @@ def show_expenses():
             total_amount = sum([expense.amount for expense in expenses_user])
             return render_template("expenses.html", expenses=expenses_user, name_user=name_user, total=round(total_amount, 2))
 
-@main.route('/add_expense', methods=['GET', 'POST'] )
+@main.route('/add_expense', methods=['GET', 'POST'])
 def adding_new_expenses():
-    
     name_user = request.values.get("user")
-    
-    if name_user ==None: 
-        return redirect (url_for("home"))
-    else: 
+
+    if name_user is None:
+        return redirect(url_for("home"))
+    else:
         form = AddExpense(request.form)
 
     categories = Category.query.all()
@@ -137,13 +136,20 @@ def adding_new_expenses():
     else:
         if form.validate():
             category_id = request.values.get("Category")
+            recurrence = request.values.get("Recurrence")
+            recurrence_end_date = request.values.get("RecurrenceEndDate")
+            if recurrence_end_date:
+                recurrence_end_date = datetime.strptime(recurrence_end_date, "%Y-%m-%d")
+
             new_expense = Expenses(
                 type_expense=request.values.get("Type"),
                 description_expense=request.values.get("Description"),
                 date_purchase=request.values.get("Date"),
                 amount=request.values.get("Amount"),
                 user_name=name_user,
-                category_id=category_id
+                category_id=category_id,
+                recurrence=recurrence,
+                recurrence_end_date=recurrence_end_date
             )
             db.session.add(new_expense)
             db.session.commit()
@@ -151,53 +157,46 @@ def adding_new_expenses():
         else:
             return render_template("add_expense.html", form=form, categories=categories)
 
-@main.route('/mod_expense', methods=['GET', 'POST'] )
-def modifying_expenses():   
+@main.route('/mod_expense', methods=['GET', 'POST'])
+def modifying_expenses():
     name_user = request.values.get("user")
-    expense_id = request.values.get ("id")
+    expense_id = request.values.get("id")
 
-    if name_user == None or expense_id == None: 
-        return redirect (url_for("home"))
-    else: 
-
-        query = db.session.query (Expenses).filter (Expenses.expense_id == expense_id)
-
-        for data in query: 
-            type_expense = data.type_expense
-            description_expense = data.description_expense
-            date_purchase = data.date_purchase
-            amount = data.amount
+    if name_user is None or expense_id is None:
+        return redirect(url_for("home"))
+    else:
+        query = db.session.query(Expenses).filter(Expenses.expense_id == expense_id).first()
+        if not query:
+            return redirect(url_for("home"))
 
         if request.method == 'GET':
-            form = ModExpense (data= {"Type" : type_expense,
-                                    "Description": description_expense,
-                                    "Date": date (int(date_purchase[:4]), int(date_purchase[5:7]), int(date_purchase[8:])),
-                                    "Amount":amount })
+            form = ModExpense(data={
+                "Type": query.type_expense,
+                "Description": query.description_expense,
+                "Date": query.date_purchase,
+                "Amount": query.amount,
+                "Recurrence": query.recurrence,
+                "RecurrenceEndDate": query.recurrence_end_date.strftime('%Y-%m-%d') if query.recurrence_end_date else ""
+            })
             return render_template("mod_expense.html", form=form)
         else:
+            form = ModExpense(request.form)
 
-            form = ModExpense (request.form)
+            if request.form.get("Delete"):
+                db.session.delete(query)
+                db.session.commit()
+                return redirect(url_for("show_expenses", user=name_user))
 
-            if request.form.get ("Delete"): 
-
-                query3 = Expenses.query.filter (Expenses.expense_id == expense_id).first() 
-                db.session.delete (query3)
-                db.session.commit() 
-                return redirect(url_for("show_expenses", user = name_user))
-
-            if form.validate(): 
-            
-                if request.form.get ("Save_changes"): 
-                    query2 = Expenses.query.filter (Expenses.expense_id == expense_id).all()
-                    for element in query2: 
-                        element.type_expense = form.Type.data
-                        element.description_expense = form.Description.data 
-                        element.date_purchase = form.Date.data
-                        element.amount = form.Amount.data 
-                    db.session.commit() 
-                
-                    return redirect(url_for("show_expenses", user = name_user))
-            else: 
+            if form.validate():
+                query.type_expense = form.Type.data
+                query.description_expense = form.Description.data
+                query.date_purchase = form.Date.data
+                query.amount = form.Amount.data
+                query.recurrence = form.Recurrence.data
+                query.recurrence_end_date = datetime.strptime(form.RecurrenceEndDate.data, "%Y-%m-%d") if form.RecurrenceEndDate.data else None
+                db.session.commit()
+                return redirect(url_for("show_expenses", user=name_user))
+            else:
                 return render_template("mod_expense.html", form=form)
 
 @main.route('/filter_expenses', methods=['GET'])
@@ -211,8 +210,9 @@ def filter_expenses():
     max_amount = request.args.get('max_amount', type=float)
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    sort_by = request.args.get('sort_by', 'date_purchase')  # Default sorting by date_purchase
+    sort_by = request.args.get('sort_by', 'date_purchase')
     order = request.args.get('order', 'asc')
+    recurrence = request.args.get('recurrence')
 
     # Build the query
     query = Expenses.query.filter_by(user_name=user_name)
@@ -232,6 +232,9 @@ def filter_expenses():
     if end_date:
         query = query.filter(Expenses.date_purchase <= end_date)
 
+    if recurrence:
+        query = query.filter(Expenses.recurrence == recurrence)
+
     if order == 'asc':
         query = query.order_by(getattr(Expenses, sort_by).asc())
     else:
@@ -249,10 +252,13 @@ def filter_expenses():
             'date_purchase': expense.date_purchase.strftime('%Y-%m-%d'),
             'amount': expense.amount,
             'user_name': expense.user_name,
+            'recurrence': expense.recurrence,
+            'recurrence_end_date': expense.recurrence_end_date.strftime('%Y-%m-%d') if expense.recurrence_end_date else None
         }
         result.append(expense_data)
 
     return jsonify(result), 200
+
 
 @main.route('/profile', methods=['GET'])
 @jwt_required()
@@ -367,29 +373,23 @@ def monthly_expense_summary():
 @jwt_required()
 def export_expenses_csv():
     try:
-        # Get the current user's ID from the JWT token
         user_id = get_jwt_identity()
-
-        # Query all expenses for the current user
         expenses = Expenses.query.filter_by(user_name=user_id).all()
 
-        # Create a StringIO object to write the CSV data
         si = StringIO()
         csv_writer = csv.writer(si)
+        csv_writer.writerow(['Type', 'Description', 'Date', 'Amount', 'Recurrence', 'RecurrenceEndDate'])
 
-        # Write CSV header
-        csv_writer.writerow(['Type', 'Description', 'Date', 'Amount'])
-
-        # Write expense data
         for expense in expenses:
             csv_writer.writerow([
                 expense.type_expense,
                 expense.description_expense,
                 expense.date_purchase.strftime('%Y-%m-%d'),
-                expense.amount
+                expense.amount,
+                expense.recurrence,
+                expense.recurrence_end_date.strftime('%Y-%m-%d') if expense.recurrence_end_date else None
             ])
 
-        # Generate the response with the CSV data
         output = make_response(si.getvalue())
         output.headers["Content-Disposition"] = "attachment; filename=expenses.csv"
         output.headers["Content-type"] = "text/csv"
@@ -398,42 +398,38 @@ def export_expenses_csv():
     except Exception as e:
         print(f"Error in export_expenses_csv: {e}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
-    
+
 
 @main.route('/export/pdf', methods=['GET'])
 @jwt_required()
 def export_expenses_pdf():
     try:
-        # Get the current user's ID from the JWT token
         user_id = get_jwt_identity()
-
-        # Query all expenses for the current user
         expenses = Expenses.query.filter_by(user_name=user_id).all()
 
-        # Create a PDF document
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
 
-        # Add title
         pdf.cell(200, 10, txt="Expense Report", ln=True, align='C')
 
-        # Add table headers
         pdf.cell(50, 10, txt="Type", border=1)
         pdf.cell(70, 10, txt="Description", border=1)
         pdf.cell(30, 10, txt="Date", border=1)
         pdf.cell(30, 10, txt="Amount", border=1)
+        pdf.cell(30, 10, txt="Recurrence", border=1)
+        pdf.cell(30, 10, txt="End Date", border=1)
         pdf.ln()
 
-        # Add expense data
         for expense in expenses:
             pdf.cell(50, 10, txt=expense.type_expense, border=1)
             pdf.cell(70, 10, txt=expense.description_expense, border=1)
             pdf.cell(30, 10, txt=expense.date_purchase.strftime('%Y-%m-%d'), border=1)
             pdf.cell(30, 10, txt=f"{expense.amount:.2f}", border=1)
+            pdf.cell(30, 10, txt=expense.recurrence if expense.recurrence else "", border=1)
+            pdf.cell(30, 10, txt=expense.recurrence_end_date.strftime('%Y-%m-%d') if expense.recurrence_end_date else "", border=1)
             pdf.ln()
 
-        # Generate the PDF and return as a response
         output = make_response(pdf.output(dest='S').encode('latin1'))
         output.headers["Content-Disposition"] = "attachment; filename=expenses.pdf"
         output.headers["Content-type"] = "application/pdf"

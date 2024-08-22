@@ -1,10 +1,12 @@
 import unittest
 from app import db, create_app
-from app.models import User, Expense, Category, RecurringExpense
+from app.models import User, Expenses, Category, RecurringExpense
+from app.config import TestingConfig
+from sqlalchemy.exc import IntegrityError
 
 class ModelTests(unittest.TestCase):
     def setUp(self):
-        self.app = create_app('testing')  # Replace with actual app factory method
+        self.app = create_app(TestingConfig)
         self.app_context = self.app.app_context()
         self.app_context.push()
         self.client = self.app.test_client()
@@ -26,12 +28,12 @@ class ModelTests(unittest.TestCase):
     def test_user_validation(self):
         user = User(email="invalidemail", password="short", username="")
         db.session.add(user)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_user_expense_relationship(self):
         user = User(email="testuser@example.com", password="validPassword123", username="testuser")
-        expense = Expense(amount=50.0, category="Food", description="Lunch", user=user)
+        expense = Expenses(amount=50.0, category="Food", description="Lunch", user=user)
         db.session.add(user)
         db.session.add(expense)
         db.session.commit()
@@ -43,32 +45,32 @@ class ModelTests(unittest.TestCase):
         user2 = User(email="duplicate@example.com", password="password2", username="user2")
         db.session.add(user1)
         db.session.add(user2)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_user_username_length(self):
         user = User(email="testuser@example.com", password="validPassword123", username="x" * 256)
         db.session.add(user)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     # Test Expense Model
     def test_expense_creation(self):
-        expense = Expense(amount=50.0, category="Food", description="Lunch")
+        expense = Expenses(amount=50.0, category="Food", description="Lunch")
         db.session.add(expense)
         db.session.commit()
         self.assertIsNotNone(expense.id)
-        self.assertEqual(Expense.query.count(), 1)
+        self.assertEqual(Expenses.query.count(), 1)
 
     def test_expense_validation(self):
-        expense = Expense(amount=-10.0, category="Misc", description="Invalid expense")
+        expense = Expenses(amount=-10.0, category="Misc", description="Invalid expense")
         db.session.add(expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_expense_category_relationship(self):
         category = Category(name="Food")
-        expense = Expense(amount=50.0, category=category, description="Lunch")
+        expense = Expenses(amount=50.0, category=category, description="Lunch")
         db.session.add(category)
         db.session.add(expense)
         db.session.commit()
@@ -76,18 +78,18 @@ class ModelTests(unittest.TestCase):
 
     def test_expense_unique_category(self):
         category = Category(name="Travel")
-        expense1 = Expense(amount=100.0, category=category, description="Trip")
-        expense2 = Expense(amount=200.0, category=category, description="Another Trip")
+        expense1 = Expenses(amount=100.0, category=category, description="Trip")
+        expense2 = Expenses(amount=200.0, category=category, description="Another Trip")
         db.session.add(category)
         db.session.add(expense1)
         db.session.add(expense2)
         db.session.commit()
-        self.assertEqual(Expense.query.count(), 2)
+        self.assertEqual(Expenses.query.count(), 2)
 
     def test_expense_amount_type(self):
-        expense = Expense(amount="not_a_number", category="Food", description="Invalid amount")
-        db.session.add(expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(TypeError):  # Expecting a TypeError due to invalid amount type
+            expense = Expenses(amount="not_a_number", category="Food", description="Invalid amount")
+            db.session.add(expense)
             db.session.commit()
 
     # Test Category Model
@@ -100,15 +102,15 @@ class ModelTests(unittest.TestCase):
 
     def test_duplicate_category_name(self):
         category1 = Category(name="Travel")
-        category2 = Category(name="Travel")  # Duplicate
+        category2 = Category(name="Travel")
         db.session.add(category1)
         db.session.add(category2)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_category_expense_relationship(self):
         category = Category(name="Entertainment")
-        expense = Expense(amount=100.0, category=category, description="Concert")
+        expense = Expenses(amount=100.0, category=category, description="Concert")
         db.session.add(category)
         db.session.add(expense)
         db.session.commit()
@@ -118,7 +120,7 @@ class ModelTests(unittest.TestCase):
     def test_category_name_length(self):
         category = Category(name="x" * 256)
         db.session.add(category)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_category_special_characters(self):
@@ -138,25 +140,25 @@ class ModelTests(unittest.TestCase):
     def test_recurring_expense_validation(self):
         recurring_expense = RecurringExpense(amount=0.0, category="Subscription", description="Zero amount", recurrence="monthly")
         db.session.add(recurring_expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_recurring_expense_date_validation(self):
         recurring_expense = RecurringExpense(amount=100.0, category="Subscription", description="Past start date", recurrence="monthly", start_date="2020-01-01")
         db.session.add(recurring_expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_recurring_expense_end_date_before_start_date(self):
         recurring_expense = RecurringExpense(amount=100.0, category="Subscription", description="End date before start date", recurrence="monthly", start_date="2024-01-01", end_date="2023-12-31")
         db.session.add(recurring_expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
     def test_recurring_expense_recurring_field_validation(self):
         recurring_expense = RecurringExpense(amount=100.0, category="Subscription", description="Invalid recurrence", recurrence="yearly")
         db.session.add(recurring_expense)
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             db.session.commit()
 
 if __name__ == '__main__':

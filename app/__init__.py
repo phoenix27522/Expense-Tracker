@@ -6,6 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import timedelta
 from app.config import Config
 from app.blacklist import blacklist
+from app.config import Config, TestingConfig
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -56,6 +57,7 @@ def create_app(config_class=Config):
         scheduler = BackgroundScheduler()
         scheduler.add_job(func=create_recurring_expenses, trigger="interval", hours=24)
         scheduler.start()
+        app.logger.info("Scheduler started.")
 
     start_scheduler()
 
