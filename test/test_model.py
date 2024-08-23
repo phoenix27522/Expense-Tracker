@@ -136,10 +136,11 @@ class CategoryModelTestCase(unittest.TestCase):
             db.session.commit()
 
     def test_category_name_length(self):
-        """Test that setting a category name longer than 50 characters raises a ValueError."""
-        category = Category(name="A" * 51)
+        # Test that setting a category name longer than 50 characters raises a ValueError
         with self.assertRaises(ValueError):
-            category.set_name("A" * 51)
+            category = Category(name="A" * 51)
+            db.session.add(category)
+            db.session.commit()
 
 class ExpensesModelTestCase(unittest.TestCase):
 
